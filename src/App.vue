@@ -15,9 +15,5 @@ export default {
   components: {
     FormComponent,
   },
-
-  data: () => ({
-    //
-  }),
 };
 </script>

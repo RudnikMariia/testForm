@@ -179,37 +179,14 @@
 </template>
 
 <script>
-import { isRequired, isString, isEmail, isMaxLength, isMinLength, isNumber } from '@/helpers/validation'
-import { validationMixin } from 'vuelidate'
-import { required, email, maxLength, minLength, numeric } from 'vuelidate/lib/validators'
+import {debounce} from '@/helpers/debounce'
+import {isRequired, isString, isEmail, isMaxLength, isMinLength, isNumber} from '@/helpers/validation'
+import {validationMixin} from 'vuelidate'
+import {required, email, maxLength, minLength, numeric} from 'vuelidate/lib/validators'
 
 export default {
   name: 'FormComponent',
   mixins: [validationMixin],
-
-  validations: {
-    phones: {
-      phone: { required, numeric },
-      phone2: { numeric },
-      phone3: { numeric }
-    },
-    user: {
-      firstName: {required},
-      lastName: {required},
-      mail: {email},
-      country: {required},
-      address: {required},
-      payment: {
-        card: {minLength: minLength(16), maxLength: maxLength(16), required},
-        cvv2: {minLength: minLength(3), maxLength: maxLength(3), required}
-      },
-      agreement: {
-        checked(val) {
-          return val
-        }
-      }
-    }
-  },
 
   data() {
     return {
@@ -226,7 +203,7 @@ export default {
         },
         agreement: false,
       },
-      countryItems: ['Uk', 'Ua'],
+      countryItems: ['Ukraine', 'USA', 'Poland'],
       phones: {
         phone: '',
         phone2: '',
@@ -238,6 +215,31 @@ export default {
       snackbar: false,
       snackbarText: '',
       timeout: 2000,
+      asyncValidateError: ''
+    }
+  },
+
+  validations: {
+    phones: {
+      phone: {required, numeric},
+      phone2: {numeric},
+      phone3: {numeric}
+    },
+    user: {
+      firstName: {required},
+      lastName: {required},
+      mail: {email},
+      country: {required},
+      address: {required},
+      payment: {
+        card: {minLength: minLength(16), maxLength: maxLength(16), required},
+        cvv2: {minLength: minLength(3), maxLength: maxLength(3), required}
+      },
+      agreement: {
+        checked(val) {
+          return val
+        }
+      }
     }
   },
 
@@ -267,7 +269,7 @@ export default {
       return isNumber(this.$v.phones.phone3);
     },
     emailError() {
-      return isEmail(this.$v.user.mail);
+      return isEmail(this.$v.user.mail) || this.asyncValidateError;
     },
     countryError() {
       return isRequired(this.$v.user.country)
@@ -281,56 +283,49 @@ export default {
   },
 
   methods: {
-    asyncValidationMock() {
-      this.loading = true;
-      setTimeout(() => {
-        const randomNumber = Math.floor(Math.random() * 4);
-        if (randomNumber < 3) {
-          this.snackbarText = 'Form successfully submit';
+    asyncFormSend(user) {
+      console.log('Log user...', user)
+      return new Promise((resolve, reject) => {
+        if (user.mail) {
+          const randomNumber = Math.floor(Math.random() * 100);
+          randomNumber < 75 ? resolve('Form successfully submit') : reject('Email validation failed');
         } else {
-          this.snackbarText = 'Email validation failed';
+          resolve('Form successfully submit');
         }
-        this.loading = false;
-        this.snackbar = true;
-      }, 1000);
-      /*return new Promise((resolve, reject) => {
-        this.loading = true;
-        setTimeout(() => {
-          const randomNumber = Math.floor(Math.random() * 4);
-          if (randomNumber < 3) {
-            resolve('Success');
-            this.snackbarText = 'Form successfully submit';
-          } else {
-            reject('Validation failed');
-            this.snackbarText = 'Email validation failed';
-          }
-          this.loading = false;
-          this.snackbar = true;
-        }, 1000);
-      });*/
+      });
     },
     submit() {
+      this.asyncValidateError = '';
       this.$v.$touch()
       if (!this.$v.$invalid) {
-        if (this.user.mail) {
-          this.asyncValidationMock();
-        } else {
-          this.loading = true;
-          setTimeout(() => {
-            this.snackbarText = 'Form successfully submit';
+        this.user.phone = Object.values(this.phones).filter(phone => phone.trim() !== '');
+        this.loading = true;
+        debounce(this.sendForm, 1000)();
+      } else {
+        this.scrollToInvalid()
+      }
+    },
+    scrollToInvalid() {
+      const allFields = ['cvv2', 'card', 'address', 'country', 'phone3', 'phone2', 'phone', 'email', 'lastName', 'firstName'];
+      let firstInvalid = null;
+      allFields.forEach((name) => {
+        this[`${name}Error`] ? firstInvalid = name : false;
+      })
+      this.$refs[firstInvalid].$el.scrollIntoView({behavior: 'smooth'});
+    },
+    sendForm() {
+      this.asyncFormSend(this.user)
+          .then((resolve) => {
+            this.snackbarText = resolve;
+          })
+          .catch((reject) => {
+            this.snackbarText = reject;
+            this.asyncValidateError = reject;
+          })
+          .finally(() => {
             this.loading = false;
             this.snackbar = true;
-          }, 1000);
-        }
-        this.user.phone = Object.values(this.phones).filter(phone => phone.trim() !== '');
-      } else {
-        const allFields = ['cvv2', 'card', 'address', 'country', 'phone3', 'phone2', 'phone', 'email', 'lastName', 'firstName'];
-        let firstInvalid = null;
-        allFields.forEach((name) => {
-          this[`${name}Error`] ? firstInvalid = name : false;
-        })
-        this.$refs[firstInvalid].$el.scrollIntoView({behavior: 'smooth'});
-      }
+          });
     },
     addPhone() {
       this.showPhone2 ? this.showPhone3 = true : this.showPhone2 = true;
